@@ -1,14 +1,19 @@
 package com.example.nextcloudmemories
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.GridView
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.example.nextcloudmemories.adapter.NextcloudRemoteImages
 import com.example.nextcloudmemories.databinding.ActivityMainBinding
 import com.example.nextcloudmemories.dto.RemoteImage
 import com.google.gson.GsonBuilder
@@ -26,12 +31,16 @@ import com.nextcloud.android.sso.ui.UiExceptionManager
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONTokener
+import java.io.BufferedInputStream
 import java.io.BufferedReader
+import java.io.InputStream
 
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var remoteImages: ArrayList<RemoteImage>
+    private lateinit var remoteImageGallery: GridView
+    private var remoteImages: ArrayList<RemoteImage> = ArrayList()
+    private lateinit var nextcloudAPI: NextcloudAPI
     private lateinit var ssoAccount: SingleSignOnAccount
     private lateinit var binding: ActivityMainBinding
 
@@ -45,27 +54,34 @@ class MainActivity : AppCompatActivity() {
 
         setSupportActionBar(binding.toolbar)
 
+        remoteImageGallery = findViewById(R.id.gridViewRemoteImages)
+
         binding.fab.setOnClickListener { view ->
-                try {
-                    AccountImporter.pickNewAccount(this)
-                } catch (e: NextcloudFilesAppNotInstalledException) {
+            try {
+                AccountImporter.pickNewAccount(this)
+            } catch (e: NextcloudFilesAppNotInstalledException) {
                 UiExceptionManager.showDialogForException(this, e);
             }
         }
 
-
         val daysIds =
-            "19016,19017,19018,19019,19020,19021,19022,18651,18652,18653,18654,18655,18656,18657,18285,18286,18287,18288,18289,18290,18291,17920,17921,17922,17923,17924,17925,17926,17555,17556,17557,17558,17559,17560,17561,17190,17191,17192,17193,17194,17195"
+            "19024,19025,18654,18655,18656,18657,18658,18659,18660"
         try {
             ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(this)
 
-            val nextcloudAPI = NextcloudAPI(this, ssoAccount, GsonBuilder().create())
+            nextcloudAPI = NextcloudAPI(this, ssoAccount, GsonBuilder().create())
+
+            val nextcloudRemoteImagesAdapter = NextcloudRemoteImages(this, remoteImages, R.layout.gallery_item)
+            remoteImageGallery.adapter = nextcloudRemoteImagesAdapter
 
             val nextcloudRequestBuilder = NextcloudRequest.Builder()
             val parameters: MutableList<QueryParam> = ArrayList()
-            parameters.add(QueryParam("body_ids",
-                daysIds
-            ))
+            parameters.add(
+                QueryParam(
+                    "body_ids",
+                    daysIds
+                )
+            )
             val thisTimeLastYearsRequest = nextcloudRequestBuilder
                 .setMethod("POST")
                 .setParameter(parameters)
@@ -74,9 +90,10 @@ class MainActivity : AppCompatActivity() {
 
             lifecycleScope.launch(Dispatchers.IO)
             {
-                Log.d("Track", "Launch Fetch Started")
+                Log.d("Track", "Launch Fetch days")
                 try {
-                    val responseStream = nextcloudAPI.performNetworkRequestV2(thisTimeLastYearsRequest)
+                    val responseStream =
+                        nextcloudAPI.performNetworkRequestV2(thisTimeLastYearsRequest)
                     val reader = BufferedReader(responseStream.body.reader())
                     val content = StringBuilder()
                     try {
@@ -89,34 +106,48 @@ class MainActivity : AppCompatActivity() {
                         reader.close()
                     }
                     Log.d("FETCH", content.toString())
-                    launch(Dispatchers.Main) {
-                        val jsonArray = JSONTokener(content.toString()).nextValue() as JSONArray
-                        remoteImages = ArrayList<RemoteImage>()
-                        for (i in 0 until jsonArray.length()) {
-                            // ID
-                            val fileId = jsonArray.getJSONObject(i).getInt("fileid")
-                            Log.i("ID: ", fileId.toString())
+                    val jsonArray = JSONTokener(content.toString()).nextValue() as JSONArray
+                    for (i in 0 until jsonArray.length()) {
+                        // ID
+                        val fileId = jsonArray.getJSONObject(i).getInt("fileid")
+                        Log.i("ID: ", fileId.toString())
 
-                            // Employee Name
-                            val eTag = jsonArray.getJSONObject(i).getString("etag")
-                            Log.i("ETag: ", eTag)
+                        // Employee Name
+                        val eTag = jsonArray.getJSONObject(i).getString("etag")
+                        Log.i("ETag: ", eTag)
 
-                            // Employee Salary
-                            val filename = jsonArray.getJSONObject(i).getString("filename")
-                            Log.i("FileName", filename)
+                        // Employee Salary
+                        val filename = jsonArray.getJSONObject(i).getString("filename")
+                        Log.i("FileName", filename)
 
-                            remoteImages.add(RemoteImage(fileId, eTag, filename))
+                        val bitmap = getRemoteImageBitmap(eTag, fileId)
+                        if (bitmap !== null) {
+                            remoteImages.add(
+                                RemoteImage(
+                                    fileId,
+                                    eTag,
+                                    filename,
+                                    bitmap
+                                )
+                            )
                         }
+
                     }
+
                 } catch (e: NextcloudHttpRequestFailedException) {
                     val message = e.getMessage(baseContext)
                     Log.d("FETCH", message)
                 }
+
+                launch(Dispatchers.Main) { nextcloudRemoteImagesAdapter.notifyDataSetChanged() }
+
             }
 
         } catch (e: NoCurrentAccountSelectedException) {
             // on below line we are adding data to our image url array list.
         }
+
+
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -156,7 +187,6 @@ class MainActivity : AppCompatActivity() {
             } catch (e: NoCurrentAccountSelectedException) {
                 UiExceptionManager.showDialogForException(context, e)
             }
-//            val nextcloudAPI = NextcloudAPI(context, ssoAccount!!, GsonBuilder().create())
 
         }
     }
@@ -170,10 +200,44 @@ class MainActivity : AppCompatActivity() {
         AccountImporter.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
     }
 
-    private fun getHeaderWithUserAgent(): HashMap<String, List<String>> {
-        val header: HashMap<String, List<String>> = HashMap()
-        header["User-Agent"] = listOf("Nextcloud_Memories_App");
-        return header
+    private fun getRemoteImageBitmap(eTag: String, fileId: Int): Bitmap? {
+        try {
+            val nextcloudRequestBuilder = NextcloudRequest.Builder()
+            val parameters: MutableList<QueryParam> = ArrayList()
+            parameters.add(QueryParam("c", eTag))
+            parameters.add(QueryParam("a", "1"))
+            parameters.add(QueryParam("x", "512"))
+            parameters.add(QueryParam("y", "512"))
+
+            val thisTimeLastYearsRequest = nextcloudRequestBuilder
+                .setMethod("GET")
+                .setParameter(parameters)
+                .setUrl(
+                    Uri.encode(
+                        "/index.php/apps/memories/api/image/preview/" + fileId,
+                        "/"
+                    )
+                )
+                .build()
+
+            Log.d("Track", "Fetch Thumbnail: " + fileId)
+            try {
+                val responseStream =
+                    nextcloudAPI.performNetworkRequestV2(thisTimeLastYearsRequest)
+                val inputStream: InputStream = responseStream.body
+                val bufferedInputStream = BufferedInputStream(inputStream)
+                return BitmapFactory.decodeStream(bufferedInputStream)
+            } catch (e: Exception) {
+                Log.d("Nextcloud fetch", e.message!!)
+            }
+
+        } catch (e: Exception) {
+            Log.e("FETCH Thumbnail", e.message!!)
+        }
+
+
+        return null
     }
 
 }
+
