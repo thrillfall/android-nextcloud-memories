@@ -7,4 +7,5 @@ data class RemoteImage (
     val eTag: String,
     val fileName: String,
     val bitmap: Bitmap,
+    val taken: Int,
 )

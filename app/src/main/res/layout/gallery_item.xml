@@ -11,5 +11,11 @@
         android:layout_height="wrap_content"
         tools:srcCompat="@drawable/ic_launcher_background" />
 
+    <TextView
+        android:id="@+id/imageTextView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="UNSET"
+        android:textAlignment="center" />
 
 </LinearLayout>

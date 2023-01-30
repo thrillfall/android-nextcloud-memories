@@ -9,7 +9,6 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.GridView
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -34,6 +33,7 @@ import org.json.JSONTokener
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
+import java.lang.Math.floor
 
 
 class MainActivity : AppCompatActivity() {
@@ -64,8 +64,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val daysIds =
-            "19024,19025,18654,18655,18656,18657,18658,18659,18660"
+        val todayId = floor(((System.currentTimeMillis() / 1000 / 86400).toDouble()))
+        val dayIds: List<String> = generateDayIds(todayId)
+
         try {
             ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(this)
 
@@ -79,7 +80,7 @@ class MainActivity : AppCompatActivity() {
             parameters.add(
                 QueryParam(
                     "body_ids",
-                    daysIds
+                    dayIds.joinToString()
                 )
             )
             val thisTimeLastYearsRequest = nextcloudRequestBuilder
@@ -120,16 +121,19 @@ class MainActivity : AppCompatActivity() {
                         val filename = jsonArray.getJSONObject(i).getString("filename")
                         Log.i("FileName", filename)
 
-                        val bitmap = getRemoteImageBitmap(eTag, fileId)
+                        val bitmap = getRemotePreviewBitmap(eTag, fileId)
                         if (bitmap !== null) {
+                            val taken = jsonArray.getJSONObject(i).getInt("dayid") * 86400
                             remoteImages.add(
                                 RemoteImage(
                                     fileId,
                                     eTag,
                                     filename,
-                                    bitmap
+                                    bitmap,
+                                    taken
                                 )
                             )
+                            launch(Dispatchers.Main) { nextcloudRemoteImagesAdapter.notifyDataSetChanged() }
                         }
 
                     }
@@ -139,15 +143,30 @@ class MainActivity : AppCompatActivity() {
                     Log.d("FETCH", message)
                 }
 
-                launch(Dispatchers.Main) { nextcloudRemoteImagesAdapter.notifyDataSetChanged() }
-
             }
 
         } catch (e: NoCurrentAccountSelectedException) {
             // on below line we are adding data to our image url array list.
         }
 
+    }
 
+    private fun generateDayIds(todayId: Double): List<String> {
+        val dayIds: ArrayList<Double> = ArrayList()
+        dayIds.add(todayId)
+        dayIds.add(todayId-1)
+        dayIds.add(todayId-2)
+
+        for (i in 1..5) {
+            val todayNYearsAgo = todayId - (365 * i)
+            dayIds.add(todayNYearsAgo+2)
+            dayIds.add(todayNYearsAgo+1)
+            dayIds.add(todayNYearsAgo)
+            dayIds.add(todayNYearsAgo-1)
+            dayIds.add(todayNYearsAgo-2)
+        }
+
+        return dayIds.map { it.toString() }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -200,7 +219,7 @@ class MainActivity : AppCompatActivity() {
         AccountImporter.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
     }
 
-    private fun getRemoteImageBitmap(eTag: String, fileId: Int): Bitmap? {
+    private fun getRemotePreviewBitmap(eTag: String, fileId: Int): Bitmap? {
         try {
             val nextcloudRequestBuilder = NextcloudRequest.Builder()
             val parameters: MutableList<QueryParam> = ArrayList()

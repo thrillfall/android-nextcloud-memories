@@ -1,13 +1,18 @@
 package com.example.nextcloudmemories.adapter
 
 import android.content.Context
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.ImageView
+import android.widget.TextView
 import com.example.nextcloudmemories.R
 import com.example.nextcloudmemories.dto.RemoteImage
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.collections.ArrayList
 
 class NextcloudRemoteImages(
     context: Context,
@@ -23,10 +28,18 @@ class NextcloudRemoteImages(
 
         val remoteImage: RemoteImage? = getItem(position)
         val remoteImageView = listItemView?.findViewById<ImageView>(R.id.idRemoteImage)
+        val remoteImageTextView = listItemView?.findViewById<TextView>(R.id.imageTextView)
 
-        remoteImageView!!.setImageBitmap(remoteImage?.bitmap)
+        remoteImage!!
+        remoteImageView!!.setImageBitmap(remoteImage.bitmap)
+        val sdf = SimpleDateFormat("yyyy")
+        val netDate = derieveDateFromUnixTimestamp(remoteImage.taken)
+        remoteImageTextView?.text = sdf.format(netDate)
 
         return listItemView!!
     }
+
+    private fun derieveDateFromUnixTimestamp(takenInSeconds: Int) =
+        Date(takenInSeconds.toLong() * 1000)
 
 }
