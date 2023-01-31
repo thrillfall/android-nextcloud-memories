@@ -12,6 +12,7 @@ import android.widget.GridView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
+import com.example.nextcloudmemories.OnThisDayProvider.generateDayIds
 import com.example.nextcloudmemories.adapter.NextcloudRemoteImages
 import com.example.nextcloudmemories.databinding.ActivityMainBinding
 import com.example.nextcloudmemories.dto.RemoteImage
@@ -64,8 +65,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val todayId = floor(((System.currentTimeMillis() / 1000 / 86400).toDouble()))
-        val dayIds: List<String> = generateDayIds(todayId)
+        val todayId = floor(((System.currentTimeMillis() / 1000 / 86400).toDouble())).toInt()
+        val dayIds: List<String> = generateDayIds(todayId, 5)
 
         try {
             ssoAccount = SingleAccountHelper.getCurrentSingleSignOnAccount(this)
@@ -149,24 +150,6 @@ class MainActivity : AppCompatActivity() {
             // on below line we are adding data to our image url array list.
         }
 
-    }
-
-    private fun generateDayIds(todayId: Double): List<String> {
-        val dayIds: ArrayList<Double> = ArrayList()
-        dayIds.add(todayId)
-        dayIds.add(todayId-1)
-        dayIds.add(todayId-2)
-
-        for (i in 1..5) {
-            val todayNYearsAgo = todayId - (365 * i)
-            dayIds.add(todayNYearsAgo+2)
-            dayIds.add(todayNYearsAgo+1)
-            dayIds.add(todayNYearsAgo)
-            dayIds.add(todayNYearsAgo-1)
-            dayIds.add(todayNYearsAgo-2)
-        }
-
-        return dayIds.map { it.toString() }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
