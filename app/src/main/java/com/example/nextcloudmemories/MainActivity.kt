@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.widget.AdapterView
 import android.widget.GridView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -16,6 +17,7 @@ import com.example.nextcloudmemories.OnThisDayProvider.generateDayIds
 import com.example.nextcloudmemories.adapter.NextcloudRemoteImages
 import com.example.nextcloudmemories.databinding.ActivityMainBinding
 import com.example.nextcloudmemories.dto.RemoteImage
+import com.example.nextcloudmemories.provider.BitmapProvider.getRemotePreviewBitmap
 import com.google.gson.GsonBuilder
 import com.nextcloud.android.sso.AccountImporter
 import com.nextcloud.android.sso.QueryParam
@@ -75,6 +77,13 @@ class MainActivity : AppCompatActivity() {
 
             val nextcloudRemoteImagesAdapter = NextcloudRemoteImages(this, remoteImages, R.layout.gallery_item)
             remoteImageGallery.adapter = nextcloudRemoteImagesAdapter
+            remoteImageGallery.onItemClickListener = AdapterView.OnItemClickListener { parent, view, position, id ->
+                val selectedImage = parent.getItemAtPosition(position) as RemoteImage
+                val intent = Intent(this, FullscreenActivity::class.java)
+                intent.putExtra("fileId", selectedImage.fileId)
+                intent.putExtra("eTag", selectedImage.eTag)
+                startActivity(intent)
+            }
 
             val nextcloudRequestBuilder = NextcloudRequest.Builder()
             val parameters: MutableList<QueryParam> = ArrayList()
@@ -122,7 +131,7 @@ class MainActivity : AppCompatActivity() {
                         val filename = jsonArray.getJSONObject(i).getString("filename")
                         Log.i("FileName", filename)
 
-                        val bitmap = getRemotePreviewBitmap(eTag, fileId)
+                        val bitmap = getRemotePreviewBitmap(eTag, fileId, nextcloudAPI, 512, 512)
                         if (bitmap !== null) {
                             val taken = jsonArray.getJSONObject(i).getInt("dayid") * 86400
                             remoteImages.add(
@@ -200,45 +209,6 @@ class MainActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         AccountImporter.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
-    }
-
-    private fun getRemotePreviewBitmap(eTag: String, fileId: Int): Bitmap? {
-        try {
-            val nextcloudRequestBuilder = NextcloudRequest.Builder()
-            val parameters: MutableList<QueryParam> = ArrayList()
-            parameters.add(QueryParam("c", eTag))
-            parameters.add(QueryParam("a", "1"))
-            parameters.add(QueryParam("x", "512"))
-            parameters.add(QueryParam("y", "512"))
-
-            val thisTimeLastYearsRequest = nextcloudRequestBuilder
-                .setMethod("GET")
-                .setParameter(parameters)
-                .setUrl(
-                    Uri.encode(
-                        "/index.php/apps/memories/api/image/preview/" + fileId,
-                        "/"
-                    )
-                )
-                .build()
-
-            Log.d("Track", "Fetch Thumbnail: " + fileId)
-            try {
-                val responseStream =
-                    nextcloudAPI.performNetworkRequestV2(thisTimeLastYearsRequest)
-                val inputStream: InputStream = responseStream.body
-                val bufferedInputStream = BufferedInputStream(inputStream)
-                return BitmapFactory.decodeStream(bufferedInputStream)
-            } catch (e: Exception) {
-                Log.d("Nextcloud fetch", e.message!!)
-            }
-
-        } catch (e: Exception) {
-            Log.e("FETCH Thumbnail", e.message!!)
-        }
-
-
-        return null
     }
 
 }
